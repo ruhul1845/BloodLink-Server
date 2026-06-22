@@ -215,6 +215,40 @@ app.post('/api/requests', auth, async (req, res) => {
   res.status(201).json({ ...request, _id: result.insertedId });
 });
 
+app.get('/api/requests/my', auth, async (req, res) => {
+  const query = { requesterId: req.user._id.toString() };
+  if (req.query.status) query.status = req.query.status;
+  const rows = await db
+    .collection('donationRequests')
+    .find(query)
+    .sort({ createdAt: -1 })
+    .toArray();
+  res.json(rows);
+});
+
+app.get(
+  '/api/requests/all',
+  auth,
+  allow('admin', 'volunteer'),
+  async (req, res) => {
+    const query = req.query.status ? { status: req.query.status } : {};
+    const rows = await db
+      .collection('donationRequests')
+      .find(query)
+      .sort({ createdAt: -1 })
+      .toArray();
+    res.json(rows);
+  }
+);
+
+app.get('/api/requests/:requestId', auth, async (req, res) => {
+  const request = await db
+    .collection('donationRequests')
+    .findOne({ _id: id(req.params.requestId) });
+  if (!request) return res.status(404).json({ message: 'Request not found' });
+  res.json(request);
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
