@@ -65,6 +65,57 @@ const allow =
 
 app.get('/', (req, res) => res.json({ ok: true, name: 'BloodLink API' }));
 
+pp.post('/api/auth/register', async (req, res) => {
+  const {
+    email,
+    password,
+    confirm_password,
+    name,
+    avatar,
+    bloodGroup,
+    district,
+    upazila,
+  } = req.body;
+  if (!email || !password || !name || !bloodGroup || !district || !upazila) {
+    return res.status(400).json({ message: 'Missing required fields' });
+  }
+  if (password !== confirm_password)
+    return res.status(400).json({ message: 'Passwords do not match' });
+  const exists = await db
+    .collection('Donor')
+    .findOne({ email: email.toLowerCase() });
+  if (exists)
+    return res.status(409).json({ message: 'Email already registered' });
+  const user = {
+    email: email.toLowerCase(),
+    password: await bcrypt.hash(password, 10),
+    name,
+    avatar,
+    bloodGroup,
+    district,
+    upazila,
+    role: 'donor',
+    status: 'active',
+    createdAt: new Date(),
+  };
+  const result = await db.collection('Donor').insertOne(user);
+  user._id = result.insertedId;
+  res.status(201).json({ user: cleanUser(user), token: tokenFor(user) });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  const user = await db
+    .collection('Donor')
+    .findOne({ email: String(email || '').toLowerCase() });
+  if (!user || !(await bcrypt.compare(password || '', user.password))) {
+    return res.status(401).json({ message: 'Invalid email or password' });
+  }
+  res.json({ user: cleanUser(user), token: tokenFor(user) });
+});
+
+app.get('/api/auth/me', auth, (req, res) => res.json(cleanUser(req.user)));
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
