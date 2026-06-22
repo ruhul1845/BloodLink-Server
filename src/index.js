@@ -387,6 +387,24 @@ app.post('/api/checkout-session/:sessionId/confirm', auth, async (req, res) => {
   res.status(201).json({ ...fund, _id: result.insertedId });
 });
 
+app.get('/api/stats', auth, allow('admin', 'volunteer'), async (req, res) => {
+  const [totalUsers, totalRequests, funds, recentUsers] = await Promise.all([
+    db.collection('Donor').countDocuments({ role: 'donor' }),
+    db.collection('donationRequests').countDocuments(),
+    db
+      .collection('funds')
+      .aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }])
+      .toArray(),
+    db.collection('Donor').find().sort({ createdAt: -1 }).limit(5).toArray(),
+  ]);
+  res.json({
+    totalUsers,
+    totalRequests,
+    totalFunding: funds[0]?.total || 0,
+    recentUsers: recentUsers.map(cleanUser),
+  });
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
