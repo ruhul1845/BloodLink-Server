@@ -171,6 +171,16 @@ app.patch('/api/users/:userId/role', auth, allow('admin'), async (req, res) => {
   res.json({ modified: true });
 });
 
+app.get('/api/donors/search', async (req, res) => {
+  const { bloodGroup, district, upazila } = req.query;
+  if (!bloodGroup || !district || !upazila) return res.json([]);
+  const users = await db
+    .collection('Donor')
+    .find({ role: 'donor', status: 'active', bloodGroup, district, upazila })
+    .toArray();
+  res.json(users.map(cleanUser));
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
