@@ -321,6 +321,72 @@ app.delete('/api/requests/:requestId', auth, async (req, res) => {
   res.json({ deleted: true });
 });
 
+app.get('/api/funds', auth, async (req, res) => {
+  const funds = await db
+    .collection('funds')
+    .find()
+    .sort({ createdAt: -1 })
+    .toArray();
+  res.json(funds);
+});
+
+app.post('/api/create-checkout-session', auth, async (req, res) => {
+  const amount = Math.round(Number(req.body.amount || 0) * 100);
+  if (amount < 100)
+    return res.status(400).json({ message: 'Minimum funding amount is 1' });
+  const clientUrl = process.env.CLIENT_URL || 'http://localhost:3000';
+  const session = await stripe.checkout.sessions.create({
+    mode: 'payment',
+    payment_method_types: ['card'],
+    customer_email: req.user.email,
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: 'usd',
+          unit_amount: amount,
+          product_data: {
+            name: 'BloodLink Organization Fund',
+            description: 'Support emergency blood donation operations',
+          },
+        },
+      },
+    ],
+    success_url: `${clientUrl}/funding?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${clientUrl}/funding?payment=cancelled`,
+    metadata: {
+      userId: req.user._id.toString(),
+      name: req.user.name,
+      email: req.user.email,
+      amount: String(Number(req.body.amount || 0)),
+    },
+  });
+  res.json({ url: session.url });
+});
+
+app.post('/api/checkout-session/:sessionId/confirm', auth, async (req, res) => {
+  const session = await stripe.checkout.sessions.retrieve(req.params.sessionId);
+  if (session.payment_status !== 'paid')
+    return res.status(400).json({ message: 'Payment is not completed' });
+  if (session.metadata?.userId !== req.user._id.toString())
+    return res.status(403).json({ message: 'Forbidden' });
+  const existing = await db
+    .collection('funds')
+    .findOne({ checkoutSessionId: session.id });
+  if (existing) return res.json(existing);
+  const fund = {
+    userId: req.user._id.toString(),
+    name: req.user.name,
+    email: req.user.email,
+    amount: Number(session.metadata?.amount || session.amount_total / 100),
+    checkoutSessionId: session.id,
+    paymentIntentId: session.payment_intent,
+    createdAt: new Date(),
+  };
+  const result = await db.collection('funds').insertOne(fund);
+  res.status(201).json({ ...fund, _id: result.insertedId });
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
