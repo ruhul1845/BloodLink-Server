@@ -289,6 +289,38 @@ app.patch('/api/requests/:requestId', auth, async (req, res) => {
   res.json({ modified: true });
 });
 
+app.post('/api/requests/:requestId/respond', auth, async (req, res) => {
+  const result = await db.collection('donationRequests').updateOne(
+    { _id: id(req.params.requestId), status: 'pending' },
+    {
+      $set: {
+        status: 'inprogress',
+        donorName: req.user.name,
+        donorEmail: req.user.email,
+        donorId: req.user._id.toString(),
+        updatedAt: new Date(),
+      },
+    }
+  );
+  if (!result.modifiedCount)
+    return res.status(400).json({ message: 'Request is not pending' });
+  res.json({ modified: true });
+});
+
+app.delete('/api/requests/:requestId', auth, async (req, res) => {
+  const request = await db
+    .collection('donationRequests')
+    .findOne({ _id: id(req.params.requestId) });
+  if (!request) return res.status(404).json({ message: 'Request not found' });
+  if (
+    req.user.role !== 'admin' &&
+    request.requesterId !== req.user._id.toString()
+  )
+    return res.status(403).json({ message: 'Forbidden' });
+  await db.collection('donationRequests').deleteOne({ _id: request._id });
+  res.json({ deleted: true });
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
