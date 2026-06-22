@@ -65,7 +65,7 @@ const allow =
 
 app.get('/', (req, res) => res.json({ ok: true, name: 'BloodLink API' }));
 
-pp.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', async (req, res) => {
   const {
     email,
     password,
