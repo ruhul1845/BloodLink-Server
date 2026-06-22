@@ -116,6 +116,22 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', auth, (req, res) => res.json(cleanUser(req.user)));
 
+app.patch('/api/users/me', auth, async (req, res) => {
+  const allowed = ['name', 'avatar', 'bloodGroup', 'district', 'upazila'];
+  const update = {};
+  allowed.forEach((key) => {
+    if (req.body[key] !== undefined) update[key] = req.body[key];
+  });
+  await db
+    .collection('Donor')
+    .updateOne(
+      { _id: req.user._id },
+      { $set: { ...update, updatedAt: new Date() } }
+    );
+  const user = await db.collection('Donor').findOne({ _id: req.user._id });
+  res.json(cleanUser(user));
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
