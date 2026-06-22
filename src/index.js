@@ -249,6 +249,46 @@ app.get('/api/requests/:requestId', auth, async (req, res) => {
   res.json(request);
 });
 
+app.patch('/api/requests/:requestId', auth, async (req, res) => {
+  const request = await db
+    .collection('donationRequests')
+    .findOne({ _id: id(req.params.requestId) });
+  if (!request) return res.status(404).json({ message: 'Request not found' });
+  const owner = request.requesterId === req.user._id.toString();
+  const canEditAll = req.user.role === 'admin';
+  const volunteerStatusOnly = req.user.role === 'volunteer';
+  if (!owner && !canEditAll && !volunteerStatusOnly)
+    return res.status(403).json({ message: 'Forbidden' });
+  const writable = [
+    'recipientName',
+    'recipientDistrict',
+    'recipientUpazila',
+    'hospitalName',
+    'address',
+    'bloodGroup',
+    'donationDate',
+    'donationTime',
+    'message',
+  ];
+  const update = {};
+  if (!volunteerStatusOnly)
+    writable.forEach(
+      (key) => req.body[key] !== undefined && (update[key] = req.body[key])
+    );
+  if (
+    req.body.status &&
+    ['pending', 'inprogress', 'done', 'canceled'].includes(req.body.status)
+  )
+    update.status = req.body.status;
+  await db
+    .collection('donationRequests')
+    .updateOne(
+      { _id: request._id },
+      { $set: { ...update, updatedAt: new Date() } }
+    );
+  res.json({ modified: true });
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
