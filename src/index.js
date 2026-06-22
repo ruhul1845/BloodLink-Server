@@ -132,6 +132,45 @@ app.patch('/api/users/me', auth, async (req, res) => {
   res.json(cleanUser(user));
 });
 
+app.get('/api/users', auth, allow('admin'), async (req, res) => {
+  const query = req.query.status ? { status: req.query.status } : {};
+  const users = await db
+    .collection('Donor')
+    .find(query)
+    .sort({ createdAt: -1 })
+    .toArray();
+  res.json(users.map(cleanUser));
+});
+
+app.patch(
+  '/api/users/:userId/status',
+  auth,
+  allow('admin'),
+  async (req, res) => {
+    if (!['active', 'blocked'].includes(req.body.status))
+      return res.status(400).json({ message: 'Invalid status' });
+    await db
+      .collection('Donor')
+      .updateOne(
+        { _id: id(req.params.userId) },
+        { $set: { status: req.body.status } }
+      );
+    res.json({ modified: true });
+  }
+);
+
+app.patch('/api/users/:userId/role', auth, allow('admin'), async (req, res) => {
+  if (!['donor', 'volunteer', 'admin'].includes(req.body.role))
+    return res.status(400).json({ message: 'Invalid role' });
+  await db
+    .collection('Donor')
+    .updateOne(
+      { _id: id(req.params.userId) },
+      { $set: { role: req.body.role } }
+    );
+  res.json({ modified: true });
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
