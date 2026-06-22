@@ -181,6 +181,40 @@ app.get('/api/donors/search', async (req, res) => {
   res.json(users.map(cleanUser));
 });
 
+app.get('/api/requests', async (req, res) => {
+  const requests = await db
+    .collection('donationRequests')
+    .find({ status: 'pending' })
+    .sort({ createdAt: -1 })
+    .toArray();
+  res.json(requests);
+});
+
+app.post('/api/requests', auth, async (req, res) => {
+  if (req.user.status === 'blocked')
+    return res
+      .status(403)
+      .json({ message: 'Blocked users cannot create requests' });
+  const request = {
+    requesterId: req.user._id.toString(),
+    requesterName: req.user.name,
+    requesterEmail: req.user.email,
+    recipientName: req.body.recipientName,
+    recipientDistrict: req.body.recipientDistrict,
+    recipientUpazila: req.body.recipientUpazila,
+    hospitalName: req.body.hospitalName,
+    address: req.body.address,
+    bloodGroup: req.body.bloodGroup,
+    donationDate: req.body.donationDate,
+    donationTime: req.body.donationTime,
+    message: req.body.message,
+    status: 'pending',
+    createdAt: new Date(),
+  };
+  const result = await db.collection('donationRequests').insertOne(request);
+  res.status(201).json({ ...request, _id: result.insertedId });
+});
+
 async function start() {
   await client.connect();
   db = client.db(process.env.DB_NAME || 'Blood');
